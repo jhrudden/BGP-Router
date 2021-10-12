@@ -198,15 +198,21 @@ class Router:
         self.routes[srcif].append(Route(srcif, packet))
         packet_copy = copy.deepcopy(packet)
         packet_copy[MESG][APTH].append(self.asn)
-        packet_json = json.dumps(packet_copy)
-        packet_json_encoded_bytes = bytearray(packet_json.encode())
         if self.relations[srcif] == CUST:
             for socket in self.sockets.keys():
                 if socket != srcif:
+                    packet_copy[SRCE] = socket[:len(socket)-1] + "1"
+                    packet_copy[DEST] = socket
+                    packet_json = json.dumps(packet_copy)
+                    packet_json_encoded_bytes = bytearray(packet_json.encode())
                     self.sockets[socket].sendall(packet_json_encoded_bytes)
         else:
            for socket in self.sockets.keys():
                 if socket != srcif and not(self.relations[socket] in [PROV, PEER]):
+                    packet_copy[SRCE] = socket[:len(socket)-1] + "1"
+                    packet_copy[DEST] = socket
+                    packet_json = json.dumps(packet_copy)
+                    packet_json_encoded_bytes = bytearray(packet_json.encode())
                     self.sockets[socket].sendall(packet_json_encoded_bytes) 
     
     def revoke(self, packet):
