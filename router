@@ -223,6 +223,17 @@ class Router:
     def dump(self, packet):
         """	handles dump table requests	"""
         # TODO
+        packet_copy = copy.deepcopy(packet)
+        packet_copy[SRCE] = packet[DEST]
+        packet_copy[DEST] = packet[SRCE]
+        packet_copy[TYPE] = TABL
+        table = []
+        for port in self.routes.keys():
+            for routes in self.routes[port]:
+                table.append({"network": routes.network, "netmask":routes.netmask, "peer": port})
+        packet_copy[MESG] = table
+        self.sockets[packet[DEST]].sendall(bytearray(packet_copy.encode()))
+        
         return True
 
     def handle_packet(self, srcif, packet):
