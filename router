@@ -221,7 +221,13 @@ class Router:
     def handle_packet(self, srcif, packet):
         """	dispatches a packet """
         # TODO
-        return False
+        if packet.type == UPDT:
+            self.update(srcif, packet)
+        else:
+            print('does not exist')
+        print('routes\n')
+        print(self.routes)
+        print('routes done\n')
 
     def send_error(self, conn, msg):
         """ Send a no_route error message """
