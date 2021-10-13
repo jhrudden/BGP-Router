@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import argparse, socket, time, json, select, struct, math, copy
+import argparse, socket, time, json, select, struct, math, copy, functools as ft
 
 #DEBUG = True
 DEBUG = False
@@ -48,7 +48,7 @@ class Route:
     netMask = None
     localPref = None
     selfOrigin = None
-    AsPath = None
+    ASPath = None
     origin = None
     def __init__(self, port, packet):
         self.port = port
@@ -56,11 +56,16 @@ class Route:
         self.netmask = packet[MESG][NMSK]
         self.localPref = packet[MESG][LPRF]
         self.selfOrigin = packet[MESG][SORG]
-        self.AsPath = packet[MESG][APTH]
+        self.ASPath = packet[MESG][APTH]
         self.origin = packet[MESG][ORIG]
 
-
-## TODO: do we need table for routes
+def and_ip_strings(ip1, ip2):
+    ip1_split = ip1.split(".")
+    ip2_split = ip2.split(".")
+    result = []
+    for i in range(len(ip1_split)):
+       result.append(str(int(ip1_split[i]) & int(ip2_split[i]))) 
+    return ft.reduce(lambda x, y: x + "." + y, result)
 
 class Router:
     asn = None
@@ -88,8 +93,12 @@ class Router:
 
     def lookup_routes(self, daddr):
         """ Lookup all valid routes for an address """
-        # TODO
         outroutes = []
+        for port in self.routes.keys():
+            for route in self.routes[port]:
+                translated_daddr = and_ip_strings(daddr, route.netmask)
+                if translated_daddr == route.network:
+                    outroutes.append(route)
         return outroutes
 
     def get_shortest_as_path(self, routes):
@@ -125,16 +134,15 @@ class Router:
          
     def get_self_origin(self, routes):
         """ select self originating routes """
-        # TODO
         outroutes = []
         for route in routes:
-            if route.selfOrigin == "true":
+            print(route.selfOrigin)
+            if route.selfOrigin:
                 outroutes.append(route)
         return outroutes
 
     def get_origin_routes(self, routes):
         """ select origin routes: IGP > EGP > UNK """
-        # TODO
         outroutes = []
         current_priority = "UNK"
         better = ["EGP", "IGP"]
@@ -163,8 +171,6 @@ class Router:
 
     def get_route(self, srcif, daddr):
         """	Select the best route for a given address	"""
-        # TODO
-        peer = None
         routes = self.lookup_routes(daddr)
         # Rules go here
         if routes:
@@ -180,12 +186,16 @@ class Router:
             # TODO
             # Final check: enforce peering relationships
             routes = self.filter_relationships(srcif, routes)
-        return self.sockets[peer] if peer else None
-
+        # TODO: may need to use submask for line below instead of returning first index
+        return routes[0] if len(routes) > 0 else None
     def forward(self, srcif, packet):
         """	Forward a data packet	"""
         # TODO
-        return False
+        print("routes are")
+        route = self.get_route(srcif, packet[DEST])
+        self.sockets[route.port].sendall(bytearray(json.dumps(packet).encode()))
+	
+        
 
     def coalesce(self):
         """	coalesce any routes that are right next to each other	"""
@@ -194,7 +204,6 @@ class Router:
 
     def update(self, srcif, packet):
         """	handle update packets	"""
-        # TODO 
         self.routes[srcif].append(Route(srcif, packet))
         packet_copy = copy.deepcopy(packet)
         packet_copy[MESG][APTH].append(self.asn)
@@ -222,7 +231,6 @@ class Router:
 
     def dump(self, packet):
         """	handles dump table requests	"""
-        # TODO
         packet_copy = copy.deepcopy(packet)
         packet_copy[SRCE] = packet[DEST]
         packet_copy[DEST] = packet[SRCE]
@@ -232,7 +240,7 @@ class Router:
             for routes in self.routes[port]:
                 table.append({"network": routes.network, "netmask":routes.netmask, "peer": port})
         packet_copy[MESG] = table
-        self.sockets[packet[DEST]].sendall(bytearray(packet_copy.encode()))
+        self.sockets[packet_copy[DEST]].sendall(bytearray(json.dumps(packet_copy).encode()))
         
         return True
 
@@ -241,8 +249,12 @@ class Router:
         # TODO
         if packet["type"] == UPDT:
             self.update(srcif, packet)
+        elif packet["type"] == DUMP:
+            self.dump(packet)
+        elif packet["type"] == DATA:
+            self.forward(srcif, packet)
         else:
-            print('does not exist')
+            return
 
     def send_error(self, conn, msg):
         """ Send a no_route error message """
