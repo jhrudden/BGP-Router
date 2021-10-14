@@ -41,7 +41,7 @@ PROV = "prov"
 
 
 ##########################################################################################
-
+""" Route class which holds information about a route on the network."""
 class Route: 
     port = None
     network = None
@@ -59,6 +59,7 @@ class Route:
         self.ASPath = packet[MESG][APTH]
         self.origin = packet[MESG][ORIG]
 
+""" Performs a bitwise and operation on two IP addresses. The addresses are strings formatted as 111.222.333.444"""
 def and_ip_strings(ip1, ip2):
     ip1_split = ip1.split(".")
     ip2_split = ip2.split(".")
@@ -136,7 +137,8 @@ class Router:
         """ select self originating routes """
         outroutes = []
         for route in routes:
-            print(route.selfOrigin)
+            if DEBUG:
+              print(route.selfOrigin)
             if route.selfOrigin:
                 outroutes.append(route)
         return outroutes
@@ -190,8 +192,8 @@ class Router:
         return routes[0] if len(routes) > 0 else None
     def forward(self, srcif, packet):
         """	Forward a data packet	"""
-        # TODO
-        print("routes are")
+        if DEBUG:
+          print("routes are")
         route = self.get_route(srcif, packet[DEST])
         self.sockets[route.port].sendall(bytearray(json.dumps(packet).encode()))
 	
@@ -275,7 +277,8 @@ class Router:
                         if self.sockets[sock] == conn:
                             srcif = sock
                     msg = json.loads(k)
-                    print(msg)
+                    if DEBUG:
+                      print(msg)
                     if not self.handle_packet(srcif, msg):
                         self.send_error(conn, msg)
                 else:
