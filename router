@@ -59,8 +59,8 @@ class Route:
         self.ASPath = packet[MESG][APTH]
         self.origin = packet[MESG][ORIG]
 
-""" Performs a bitwise and operation on two IP addresses. The addresses are strings formatted as 111.222.333.444"""
 def and_ip_strings(ip1, ip2):
+    """ Performs a bitwise and operation on two IP addresses. The addresses are strings formatted as 111.222.333.444"""
     ip1_split = ip1.split(".")
     ip2_split = ip2.split(".")
     result = []
@@ -190,10 +190,12 @@ class Router:
             routes = self.filter_relationships(srcif, routes)
         # TODO: may need to use submask for line below instead of returning first index
         return routes[0] if len(routes) > 0 else None
+
     def forward(self, srcif, packet):
         """	Forward a data packet	"""
         if DEBUG:
           print("routes are")
+        # get route that is most optimal and forward packet
         route = self.get_route(srcif, packet[DEST])
         self.sockets[route.port].sendall(bytearray(json.dumps(packet).encode()))
 	
@@ -206,20 +208,31 @@ class Router:
 
     def update(self, srcif, packet):
         """	handle update packets	"""
+        # add info about where route came from to routing table
         self.routes[srcif].append(Route(srcif, packet))
+        # begin process of sending update message to neighboring routers
         packet_copy = copy.deepcopy(packet)
+        # add our asn to a copy of the packets ASPATH
         packet_copy[MESG][APTH].append(self.asn)
+
+        # if packet came from customer, then send it to all neighbors besides src
         if self.relations[srcif] == CUST:
             for socket in self.sockets.keys():
                 if socket != srcif:
-                    packet_copy[SRCE] = socket[:len(socket)-1] + "1"
+                    # new DEST should be the neighbor it is being sent to and new SRCE should be a
+                    # ip within this router
+                    ip_array = socket.split(".")
+                    packet_copy[SRCE] = (".").join(ip_array[:len(ip_array) - 1]) + ".1"
                     packet_copy[DEST] = socket
                     packet_json = json.dumps(packet_copy)
                     packet_json_encoded_bytes = bytearray(packet_json.encode())
                     self.sockets[socket].sendall(packet_json_encoded_bytes)
+        # if packet came from PROV or PEER only send it to Customers
         else:
            for socket in self.sockets.keys():
                 if socket != srcif and not(self.relations[socket] in [PROV, PEER]):
+                    # new DEST should be the neighbor it is being sent to and new SRCE should be a
+                    # ip within this router
                     packet_copy[SRCE] = socket[:len(socket)-1] + "1"
                     packet_copy[DEST] = socket
                     packet_json = json.dumps(packet_copy)
@@ -234,12 +247,14 @@ class Router:
     def dump(self, packet):
         """	handles dump table requests	"""
         packet_copy = copy.deepcopy(packet)
+        # send packet back from windst it came! But with our routing table info
         packet_copy[SRCE] = packet[DEST]
         packet_copy[DEST] = packet[SRCE]
         packet_copy[TYPE] = TABL
         table = []
         for port in self.routes.keys():
             for routes in self.routes[port]:
+                # add each route in our routing table to array for dump message
                 table.append({"network": routes.network, "netmask":routes.netmask, "peer": port})
         packet_copy[MESG] = table
         self.sockets[packet_copy[DEST]].sendall(bytearray(json.dumps(packet_copy).encode()))
