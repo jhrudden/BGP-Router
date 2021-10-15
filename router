@@ -151,7 +151,7 @@ class Router:
         for route in routes:
             if route.origin == current_priority:
                 outroutes.append(routes)
-            elif route.origin in better:
+            elif current_priority != "IGP" and route.origin in better:
                 current_priority = route.origin
                 better.remove(route.origin)
                 outroutes = [route]
