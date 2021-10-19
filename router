@@ -157,6 +157,11 @@ class Router:
                 outroutes = [route]
 
         return outroutes
+
+    def get_lowest_ip_address(self, routes):
+      """ get the path the router with the lowest ip address """
+      return [ft.reduce(lambda x, y : x if (x.network.replace(".", "") < y.network.replace(".", "")) else y, routes, routes[0])]
+
         
 
     def filter_relationships(self, srcif, routes):
@@ -186,6 +191,7 @@ class Router:
             routes = self.get_origin_routes(routes)
             # 5. Lowest IP Address
             # TODO
+            # lowest ip address - and the two ip addresses together see which one matches
             # Final check: enforce peering relationships
             routes = self.filter_relationships(srcif, routes)
         # TODO: may need to use submask for line below instead of returning first index
