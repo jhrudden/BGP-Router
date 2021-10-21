@@ -68,6 +68,14 @@ def and_ip_strings(ip1, ip2):
        result.append(str(int(ip1_split[i]) & int(ip2_split[i]))) 
     return ft.reduce(lambda x, y: x + "." + y, result)
 
+def find_submask_length(route):
+    netmask_split = "".join([bin(int(x))[2:] for x in route.netmask.split(".")])
+    if "01" not in netmask_split:
+      return netmask_split.count("1")
+    else:
+      return -1
+
+
 class Router:
     asn = None
     routes = None
@@ -103,6 +111,19 @@ class Router:
                 if translated_daddr == route.network:
                     outroutes.append(route)
         return outroutes
+
+    def longest_prefix_match(self, routes):
+      outroutes = []
+      longestPrefix = 0;
+      for route in routes:
+        currentPrefix = find_submask_length(route)
+        if currentPrefix > longestPrefix:
+          outroutes = [route]
+          longestPrefix = currentPrefix
+        elif currentPrefix == longestPrefix:
+          outroutes.append(route)
+      
+      return outroutes
 
     def get_shortest_as_path(self, routes):
         """ select the route with the shortest AS Path """
@@ -186,6 +207,7 @@ class Router:
         routes = self.lookup_routes(daddr)
         # Rules go here
         if routes:
+            routes = self.longest_prefix_match(routes)
             # 1. Highest Preference
             routes = self.get_highest_preference(routes)
             #print("highest pref")
@@ -212,6 +234,7 @@ class Router:
             #print("filter relationships")
             #print(routes)
         # TODO: may need to use submask for line below instead of returning first index
+        #print(routes)
         return routes[0] if len(routes) > 0 else None
 
     def forward(self, srcif, packet):
@@ -221,15 +244,16 @@ class Router:
         # get route that is most optimal and forward packet
         route = self.get_route(srcif, packet[DEST])
         if (route is None):
+          print(packet)
+          print(srcif)
           return False
         self.sockets[route.port].sendall(bytearray(json.dumps(packet).encode()))
 
         return True
-	
-        
 
     def coalesce(self):
         """	coalesce any routes that are right next to each other	"""
+        
         # TODO (this is the most difficult task, save until last)
         return False
 
@@ -343,12 +367,21 @@ class Router:
         else:
             return False
 
-    def send_error(self, conn, packet):
+    def send_error(self, conn, packet, srcif):
         """ Send a no_route error message """
         packet[TYPE] = NRTE
         packet[MESG] = {}
-        src_ip_array = packet[DEST].split(".")
+        # print("packet source: " + packet[SRCE])
+        # print("packet destination: " + packet[DEST])
+        # src_ip_array = packet[DEST].split(".")
+        # packet[SRCE], packet[DEST] = (".").join(src_ip_array[:len(src_ip_array) - 1]) + ".1", packet[SRCE]
+        #packet[SRCE], packet[DEST] = packet[DEST], packet[SRCE]
+
+        src_ip_array = srcif.split(".")
         packet[SRCE], packet[DEST] = (".").join(src_ip_array[:len(src_ip_array) - 1]) + ".1", packet[SRCE]
+
+        # print("new packet source: " + packet[SRCE])
+        # print("new packet destination: " + packet[DEST])
 
         #packet[SRCE], packet[DEST] = packet[DEST], packet[SRCE]
         conn.sendall(bytearray(json.dumps(packet).encode()))
@@ -370,7 +403,7 @@ class Router:
                     if DEBUG:
                       print(msg)
                     if not self.handle_packet(srcif, msg):
-                        self.send_error(conn, msg)
+                        self.send_error(conn, msg, srcif)
                 else:
                     return
         return
