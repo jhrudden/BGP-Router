@@ -332,7 +332,6 @@ class Router:
         self.routes[srcif] = aggregated_routes
 
         return True
-
     
 
     def update(self, srcif, packet):
