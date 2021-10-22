@@ -65,11 +65,8 @@ class Route:
       return "%s/%s -> %s" % (self.network, self.cidr_length, self.netmask)
 
     def __str__(self):
-      # return "Route: port = %s, network = %s, netmask = %s, localPref = %s, \
-      # selfOrigin = %s, ASPath = %s, origin = %s, \
-      # cidr_length = %s" % (self.port, self.network, self.netmask, self.localPref,
-      # self.selfOrigin, self.ASPath, self.origin, self.cidr_length)
       return "%s/%s -> %s" % (self.network, self.cidr_length, self.netmask)
+
     def __eq__(self, other):
         return (self.port == other.port 
                 and self.network == other.network 
@@ -89,8 +86,7 @@ class Route:
           index_to_insert = aggregate_route.cidr_length + netmask_binary[:aggregate_route.cidr_length].count(".")
           netmask_binary = netmask_binary[:index_to_insert] + "0" + netmask_binary[index_to_insert + 1:]
           aggregate_route.netmask = ".".join([str(int(x, 2)) for x in netmask_binary.split(".")])
-
-        print("New aggregate route: " + str(aggregate_route))
+          
         return aggregate_route
 
 def and_ip_strings(ip1, ip2):
@@ -110,10 +106,6 @@ def find_submask_length(route):
       return -1
 
 def can_aggregate(route1, route2):
-    # print("--------------------- CAN_AGGREGATE")
-    # print(route1)
-    # print(route2)
-    # print("Can these routes be aggregated: " + str(routes_adjacent(route1, route2)))
     return (route1.cidr_length == route2.cidr_length 
     and route1.port == route2.port 
     and route1.localPref == route2.localPref
@@ -272,31 +264,16 @@ class Router:
             routes = self.longest_prefix_match(routes)
             # 1. Highest Preference
             routes = self.get_highest_preference(routes)
-            #print("highest pref")
-            #print(routes)
             # 2. Self Origin
             routes = self.get_self_origin(routes)
-            #print("get self origin")
-            #print(routes)
             # 3. Shortest ASPath
             routes = self.get_shortest_as_path(routes)
-            #print("get shortest as path")
-            #print(routes)
             # 4. IGP > EGP > UNK
             routes = self.get_origin_routes(routes)
-            #print("get origin routes")
-            #print(routes)
             # 5. Lowest IP Address
             routes = self.get_lowest_ip_address(routes)
-            #print("get lowest ip address")
-            #print(routes)
-            # lowest ip address - and the two ip addresses together see which one matches
             # Final check: enforce peering relationships
             routes = self.filter_relationships(srcif, routes)
-            #print("filter relationships")
-            #print(routes)
-        # TODO: may need to use submask for line below instead of returning first index
-        #print(routes)
         return routes[0] if len(routes) > 0 else None
 
     def forward(self, srcif, packet):
@@ -329,8 +306,6 @@ class Router:
               aggregated_routes.append(route)
         print("Routes after agregation: " + str(aggregated_routes))
         
-
-        # TODO: aggregated_routes can still contain routes that can be aggregated with each other
         aggregated_routes = sorted(aggregated_routes, reverse=True, key=lambda x: x.cidr_length)
         index = 0;
         while index + 1 < len(aggregated_routes):
