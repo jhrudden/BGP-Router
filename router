@@ -70,6 +70,16 @@ class Route:
       # cidr_length = %s" % (self.port, self.network, self.netmask, self.localPref,
       # self.selfOrigin, self.ASPath, self.origin, self.cidr_length)
       return "%s/%s -> %s" % (self.network, self.cidr_length, self.netmask)
+    def __eq__(self, other):
+        return (self.port == other.port 
+                and self.network == other.network 
+                and self.netmask == other.netmask 
+                and self.localPref == other.localPref
+                and self.selfOrigin == other.selfOrigin 
+                and self.ASPath == other.ASPath
+                and self.origin  == other.origin
+                and self.cidr_length  == other.cidr_length
+                )
 
     def aggregate_route(self, reduce_cidr):
         aggregate_route = copy.deepcopy(self)
