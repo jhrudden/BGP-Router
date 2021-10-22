@@ -62,13 +62,14 @@ class Route:
         self.cidr_length = find_submask_length(self)
 
     def __repr__(self):
-      return "%s/%s -> %s" % (self.network, self.cidr_length, self.port)
+      return "%s/%s -> %s" % (self.network, self.cidr_length, self.netmask)
 
     def __str__(self):
-      return "Route: port = %s, network = %s, netmask = %s, localPref = %s, \
-      selfOrigin = %s, ASPath = %s, origin = %s, \
-      cidr_length = %s" % (self.port, self.network, self.netmask, self.localPref,
-      self.selfOrigin, self.ASPath, self.origin, self.cidr_length)
+      # return "Route: port = %s, network = %s, netmask = %s, localPref = %s, \
+      # selfOrigin = %s, ASPath = %s, origin = %s, \
+      # cidr_length = %s" % (self.port, self.network, self.netmask, self.localPref,
+      # self.selfOrigin, self.ASPath, self.origin, self.cidr_length)
+      return "%s/%s -> %s" % (self.network, self.cidr_length, self.netmask)
 
     def aggregate_route(self, reduce_cidr):
         aggregate_route = copy.deepcopy(self)
@@ -314,6 +315,7 @@ class Router:
               aggregated_routes[len(aggregated_routes) - 1] = aggregate(current_aggregated_route, route)
           else:
               aggregated_routes.append(route)
+        print("Routes after agregation: " + str(aggregated_routes))
 
         # TODO: aggregated_routes can still contain routes that can be aggregated with each other
         
