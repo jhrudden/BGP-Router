@@ -99,10 +99,10 @@ def find_submask_length(route):
       return -1
 
 def can_aggregate(route1, route2):
-    print("--------------------- CAN_AGGREGATE")
-    print(route1)
-    print(route2)
-    print("Can these routes be aggregated: " + str(routes_adjacent(route1, route2)))
+    # print("--------------------- CAN_AGGREGATE")
+    # print(route1)
+    # print(route2)
+    # print("Can these routes be aggregated: " + str(routes_adjacent(route1, route2)))
     return (route1.cidr_length == route2.cidr_length 
     and route1.port == route2.port 
     and route1.localPref == route2.localPref
