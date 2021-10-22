@@ -316,21 +316,17 @@ class Router:
           else:
               aggregated_routes.append(route)
         print("Routes after agregation: " + str(aggregated_routes))
-
+        
 
         # TODO: aggregated_routes can still contain routes that can be aggregated with each other
         aggregated_routes = sorted(aggregated_routes, reverse=True, key=lambda x: x.cidr_length)
         index = 0;
-        while index + 1 != len(aggregated_routes):
+        while index + 1 < len(aggregated_routes):
             item1 = aggregated_routes[index]
-            second_index = index + 1
-            while second_index != len(aggregated_routes) and item1.cidr_length == aggregated_routes[second_index].cidr_length:
-                item2 = aggregated_routes[second_index]
-                if can_aggregate(item1, item2):
-                    aggregated_routes[index] = aggregate(item1, item2)
-                    aggregated_routes.pop(second_index)
-                else:
-                    second_index += 1
+            item2 = aggregated_routes[index + 1]
+            if can_aggregate(item1, item2):
+                aggregated_routes[index] = aggregate(item1, item2)
+                aggregated_routes.pop(index + 1)
             index += 1
             
         
