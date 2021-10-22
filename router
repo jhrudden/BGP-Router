@@ -50,6 +50,7 @@ class Route:
     selfOrigin = None
     ASPath = None
     origin = None
+    cidr_length = 0
     def __init__(self, port, packet):
         self.port = port
         self.network = packet[MESG][NTWK]
@@ -58,6 +59,28 @@ class Route:
         self.selfOrigin = packet[MESG][SORG]
         self.ASPath = packet[MESG][APTH]
         self.origin = packet[MESG][ORIG]
+        self.cidr_length = find_submask_length(self)
+
+    def __repr__(self):
+      return "%s/%s -> %s" % (self.network, self.cidr_length, self.port)
+
+    def __str__(self):
+      return "Route: port = %s, network = %s, netmask = %s, localPref = %s, \
+      selfOrigin = %s, ASPath = %s, origin = %s, \
+      cidr_length = %s" % (self.port, self.network, self.netmask, self.localPref,
+      self.selfOrigin, self.ASPath, self.origin, self.cidr_length)
+
+    def aggregate_route(self, reduce_cidr):
+        aggregate_route = copy.deepcopy(self)
+        if (reduce_cidr):
+          aggregate_route.cidr_length = self.cidr_length - 1
+          netmask_binary = ".".join([bin(int(x))[2:].zfill(8) for x in self.netmask.split(".")])
+          index_to_insert = aggregate_route.cidr_length + netmask_binary[:aggregate_route.cidr_length].count(".")
+          netmask_binary = netmask_binary[:index_to_insert] + "0" + netmask_binary[index_to_insert + 1:]
+          aggregate_route.netmask = ".".join([str(int(x, 2)) for x in netmask_binary.split(".")])
+
+        print("New aggregate route: " + str(aggregate_route))
+        return aggregate_route
 
 def and_ip_strings(ip1, ip2):
     """ Performs a bitwise and operation on two IP addresses. The addresses are strings formatted as 111.222.333.444"""
@@ -75,11 +98,38 @@ def find_submask_length(route):
     else:
       return -1
 
+def can_aggregate(route1, route2):
+    print("--------------------- CAN_AGGREGATE")
+    print(route1)
+    print(route2)
+    print("Can these routes be aggregated: " + str(routes_adjacent(route1, route2)))
+    return (route1.cidr_length == route2.cidr_length 
+    and route1.port == route2.port 
+    and route1.localPref == route2.localPref
+    and route1.selfOrigin == route2.selfOrigin
+    and route1.ASPath == route2.ASPath
+    and route1.origin == route2.origin
+    and routes_adjacent(route1, route2))
+
+def routes_adjacent(route1, route2):
+    masked_prefix1 = "".join([bin(int(x))[2:].zfill(8) for x in and_ip_strings(route1.network, route1.netmask).split(".")])[:route1.cidr_length - 1]
+    masked_prefix2 = "".join([bin(int(x))[2:].zfill(8) for x in and_ip_strings(route2.network, route2.netmask).split(".")])[:route2.cidr_length - 1]
+    return masked_prefix1 == masked_prefix2
+
+def aggregate(route1, route2):
+  route1_masked = "".join([bin(int(x))[2:].zfill(8) for x in and_ip_strings(route1.network, route1.netmask).split(".")])
+  route2_masked = "".join([bin(int(x))[2:].zfill(8) for x in and_ip_strings(route2.network, route2.netmask).split(".")])
+  reduce_cidr = route1_masked[:route1.cidr_length] != route2_masked[:route2.cidr_length]
+  if (route1.network < route2.network):
+    return route1.aggregate_route(reduce_cidr)
+  else:
+    return route2.aggregate_route(reduce_cidr)
+  
 
 class Router:
     asn = None
     routes = None
-    updates = None
+    nonaggregatedRoutes = None
     revoked = None
     relations = None
     sockets = None
@@ -87,7 +137,7 @@ class Router:
     def __init__(self, asn, networks):
         self.asn = asn
         self.routes = {} # {port: Route[]}
-        self.updates = []
+        self.nonaggregatedRoutes = {}
         self.revoked = []
         self.relations = {}
         self.sockets = {}
@@ -100,6 +150,7 @@ class Router:
             self.sockets[network].connect(network)
             self.relations[network] = relation
             self.routes[network] = []
+            self.nonaggregatedRoutes[network] = []
         return
 
     def lookup_routes(self, daddr):
@@ -244,23 +295,41 @@ class Router:
         # get route that is most optimal and forward packet
         route = self.get_route(srcif, packet[DEST])
         if (route is None):
-          print(packet)
-          print(srcif)
           return False
         self.sockets[route.port].sendall(bytearray(json.dumps(packet).encode()))
 
         return True
 
-    def coalesce(self):
+    def coalesce(self, srcif):
         """	coalesce any routes that are right next to each other	"""
+        if (len(self.nonaggregatedRoutes[srcif]) == 0):
+          self.routes[srcif] = []
+          return True
+        routes_to_aggregate = sorted(self.nonaggregatedRoutes[srcif], key=lambda x: x.cidr_length)
+        print("Routes to aggregate: " + str(routes_to_aggregate))
+        aggregated_routes = [routes_to_aggregate[0]]
+        for route in routes_to_aggregate[1:]:
+          current_aggregated_route = aggregated_routes[len(aggregated_routes) - 1]
+          if can_aggregate(current_aggregated_route, route):
+              aggregated_routes[len(aggregated_routes) - 1] = aggregate(current_aggregated_route, route)
+          else:
+              aggregated_routes.append(route)
+
         
-        # TODO (this is the most difficult task, save until last)
-        return False
+        
+        self.routes[srcif] = aggregated_routes
+
+        return True
+
+    
 
     def update(self, srcif, packet):
         """	handle update packets	"""
         # add info about where route came from to routing table
-        self.routes[srcif].append(Route(srcif, packet))
+        
+        self.nonaggregatedRoutes[srcif].insert(0, Route(srcif, packet))
+        self.coalesce(srcif)
+
         # begin process of sending update message to neighboring routers
         packet_copy = copy.deepcopy(packet)
         # add our asn to a copy of the packets ASPATH
@@ -298,35 +367,19 @@ class Router:
     
     def revoke(self, packet):
         """	handle revoke packets	"""
-        # initalize list of routes to remove to []
-        # lookup routes[packet.src] --> all routes originating from src
-        # loop throsugh each route
-        #   loop through packet.msg
-        #      if network and netmask are the same in the route and the current msg
-        #          add route to list of routes to remove
-        #          create revoke object with the source, network, netmask
-        #          break
         routes_to_remove = []
         routes_from_src = self.routes[packet[SRCE]]
-        print(packet[MESG])
         for route in routes_from_src:
           for revoke_message in packet[MESG]:
-            print("Revoked message network: " + revoke_message[NTWK])
-            print("route network: " + route.network)
-            print("Revoked message netmask: " + revoke_message[NMSK])
-            print("route netmask: " + route.netmask)
             if (route.network == revoke_message[NTWK] and route.netmask == revoke_message[NMSK]):
-              print("Reached inner if statement")
               routes_to_remove.append(route)
               self.revoked.append(route)
               break
 
-        print("looped through revoke packet")
-        print(routes_from_src)
         # remove routes that we need to
         for route_to_remove in routes_to_remove:
-          print("Route to remove network: " + route_to_remove.network)
-          self.routes[packet[SRCE]].remove(route_to_remove)
+          self.nonaggregatedRoutes[packet[SRCE]].remove(route_to_remove)
+          self.coalesce(packet[SRCE])
 
         
         # send revoke messages if necessar
@@ -349,6 +402,7 @@ class Router:
                 # add each route in our routing table to array for dump message
                 table.append({"network": routes.network, "netmask":routes.netmask, "peer": port})
         packet_copy[MESG] = table
+        print(json.dumps(packet_copy))
         self.sockets[packet_copy[DEST]].sendall(bytearray(json.dumps(packet_copy).encode()))
         
         return True
