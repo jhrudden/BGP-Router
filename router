@@ -312,7 +312,9 @@ class Router:
         for route in routes_to_aggregate[1:]:
           current_aggregated_route = aggregated_routes[len(aggregated_routes) - 1]
           if can_aggregate(current_aggregated_route, route):
-              aggregated_routes[len(aggregated_routes) - 1] = aggregate(current_aggregated_route, route)
+              new_aggregated_route = aggregate(current_aggregated_route, route)
+              if (not(new_aggregated_route in self.revoked)):
+                  aggregated_routes[len(aggregated_routes) - 1] = new_aggregated_route 
           else:
               aggregated_routes.append(route)
         print("Routes after agregation: " + str(aggregated_routes))
@@ -325,8 +327,10 @@ class Router:
             item1 = aggregated_routes[index]
             item2 = aggregated_routes[index + 1]
             if can_aggregate(item1, item2):
-                aggregated_routes[index] = aggregate(item1, item2)
-                aggregated_routes.pop(index + 1)
+                new_agg = aggregate(item1, item2)
+                if (not(new_agg in self.revoked)):
+                    aggregated_routes[index] = new_agg
+                    aggregated_routes.pop(index + 1)
             index += 1
             
         
